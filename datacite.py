@@ -2,21 +2,34 @@ from pydantic import AnyUrl, ValidationError, BaseModel
 from typing import List, Dict, Optional, Any
 from enum import Enum
 
+class DataciteNameType(Enum):
+    Organizational = "Organizational"
+    Personal = "Personal"
+
+class DataciteAffiliation(BaseModel):
+    affiliation: str
+
 class DataciteIdentifier(BaseModel):
     
     class DataciteIdentifierType(Enum):
         DOI="DOI"
     
-    identifier: str = ""
+    identifier: str
     identifierType: DataciteIdentifierType
 
+class DataciteNameIdentifier(BaseModel):
+    nameIdentifier: str
+    nameIdentifierScheme: str
+    schemeURI: Optional[AnyUrl]
 
 class DataciteCreator(BaseModel):
-    creatorName: str
-    nameIdentifiers: Optional[str]
-    affiliations : Optional[List[str]]
-    familyName: Optional[str]
+    name: str
+    nameType: Optional[DataciteNameType]
     givenName: Optional[str]
+    affiliations : Optional[List[DataciteAffiliation]]
+    familyName: Optional[str]
+    lang: Optional[str]
+    nameIdentifiers: Optional[DataciteNameIdentifier]
 
 
 class DataciteTitle(BaseModel):
@@ -28,21 +41,19 @@ class DataciteTitle(BaseModel):
         Other = "Other"
     
     title: str = ""
-    type: Optional[DataciteTitleType]
+    titleType: Optional[DataciteTitleType]
     lang: Optional[str]        
 
 
 class DataciteSubject(BaseModel):
-    subject : str = ""
-    subjectScheme : Optional[str] = ""
-    schemeURI: Optional[AnyUrl] = ""
-    valueURI: Optional[AnyUrl] = ""
-    lang : str = ""
+    subject : str
+    subjectScheme : Optional[str]
+    schemeURI: Optional[AnyUrl]
+    valueURI: Optional[AnyUrl]
+    lang : Optional[str]
 
 
-class DataciteResourceType(BaseModel):
-
-    class DataciteResourceTypeGeneral(Enum):
+class DataciteResourceTypeGeneral(Enum):
         Audiovisual = "Audiovisual"
         Collection = "Collection"
         Dataset = "Dataset"
@@ -58,8 +69,9 @@ class DataciteResourceType(BaseModel):
         Workflow = "Workflow"
         Other = "Other"
 
-    resourceType : Optional[str] = ""
-    resourceTypeGeneral: DataciteResourceTypeGeneral = None
+class DataciteType(BaseModel):
+    resourceType : Optional[str]
+    resourceTypeGeneral: DataciteResourceTypeGeneral
 
 
 class DataciteContributor(BaseModel):
@@ -86,9 +98,11 @@ class DataciteContributor(BaseModel):
         Supervisor = "Supervisor"
         WorkPackageLeader = "WorkPackageLeader"
         
-    contributorType: DataciteContributorType = None
-    contributorName: str = ""
-    affiliations: Optional[List[str]] = []
+    contributorType: DataciteContributorType
+    name: str
+    nameType: Optional[DataciteNameType]
+    nameIdentifiers: Optional[List[DataciteNameIdentifier]]
+    affiliations: Optional[List[DataciteAffiliation]] = []
     familyName: Optional[str] = ""
     givenName: Optional[str] = ""
     
@@ -202,18 +216,18 @@ class DataciteGeoLocation(BaseModel):
     geoLocationPlace : Optional[str]
     geoLocationPolygon: Optional[List[DataciteGeoLocationPoint]] # Add min items 3
         
+
 class Datacite(BaseModel):
     # Required fields
-    identifier: DataciteIdentifier
+    types: DataciteType
+    identifiers: List[DataciteIdentifier]
     creators: List[DataciteCreator]
     titles: List[DataciteTitle]
     publisher : str 
-    publicationYear : str
-    resourceType: DataciteResourceType 
-        
+    publicationYear : str # Add year validation
+    
     # Optional fields
     subjects : Optional[List[DataciteSubject]]
-    resourceType : Optional[DataciteResourceType]
     contributors : Optional[List[DataciteContributor]]
     language: Optional[str]
     alternateIdentifiers : Optional[List[DataciteAlternateIdentifier]]
@@ -236,7 +250,8 @@ class Datacite(BaseModel):
     
     def describe(self):
         print("Titles: {}".format([title.title for title in self.titles]))
-        print("Creators: {}".format([creator.creatorName for creator in self.creators]))
+        print("Creators: {}".format([c.name for c in self.creators]))
+        print("Contributors {}".format([c.name for c in self.contributors]))
         print("Publisher: {}".format(self.publisher))
         print("Publication year: {}".format(self.publicationYear))
         print()
@@ -247,9 +262,29 @@ class Datacite(BaseModel):
         self.titles.append(DataciteTitle(**kwargs))
         
     def add_creator(self, **kwargs):
-        self.creators.append(DataciteCreator(**kwargs))
+        if self.creators:
+            self.creators.append(DataciteCreator(**kwargs))
+        else: self.creators = [DataciteCreator(**kwargs)]
         
     def add_contributor(self, **kwargs):
         if self.contributors:
             self.contributors.append(DataciteContributor(**kwargs))
         else: self.contributors = [DataciteContributor(**kwargs)]
+
+    
+
+    def add(self, field, **kwargs):
+        class_map = {
+                "titles": DataciteTitle
+            }
+
+        if field not in class_map:
+            raise BaseException
+
+        print(getattr(self, field))
+        base_value = getattr(self, field)
+        new_value = base_value.append(class_map[field](**kwargs))
+        print(base_value)
+        print(new_value)
+        if getattr(self, field):
+            setattr(self, field, new_value)
